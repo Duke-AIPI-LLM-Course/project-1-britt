@@ -58,7 +58,7 @@ def plot_results():
     plt.savefig("results/confusion_matrix.png")
     plt.close()
 
-    print("✅ Saved all plots to /results/")
+    print(" Saved all plots to /results/")
 
 if __name__ == "__main__":
     plot_results()
