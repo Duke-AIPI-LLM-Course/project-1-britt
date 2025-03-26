@@ -7,7 +7,7 @@ from transformers import (
 )
 from torch.optim import AdamW
 from tqdm import tqdm
-from data import load_commonsenseqa
+from scripts.data import load_commonsenseqa
 
 
 class CommonsenseQADataset(Dataset):
@@ -39,9 +39,6 @@ class CommonsenseQADataset(Dataset):
 
 def train():
     train_ds, _ = load_commonsenseqa()
-    
-    # ✅ FAST DEV: only use 3000 examples
-    train_ds = train_ds.select(range(3000))
 
     tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
     dataset = CommonsenseQADataset(train_ds, tokenizer)
@@ -54,7 +51,7 @@ def train():
     model.to(device)
     model.train()
 
-    num_epochs = 3  # ✅ also reduce epochs for fast testing
+    num_epochs = 3  # ✅ Slightly fewer epochs
     total_steps = len(dataloader) * num_epochs
 
     scheduler = get_scheduler(
@@ -64,7 +61,7 @@ def train():
         num_training_steps=total_steps
     )
 
-    print(f"🚀 Training on {device} for {num_epochs} epochs with 3,000 examples")
+    print(f"🚀 Training on {device} with roberta-base for {num_epochs} epochs")
 
     for epoch in range(num_epochs):
         print(f"\n📘 Epoch {epoch + 1}/{num_epochs}")
