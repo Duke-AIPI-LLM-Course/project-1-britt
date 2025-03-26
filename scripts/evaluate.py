@@ -1,8 +1,8 @@
 import torch
 from torch.utils.data import DataLoader
 from transformers import RobertaTokenizer, RobertaForMultipleChoice
-from src.data import load_commonsenseqa
-from src.train import CommonsenseQADataset
+from data import load_commonsenseqa
+from train import CommonsenseQADataset
 import json
 import os
 
