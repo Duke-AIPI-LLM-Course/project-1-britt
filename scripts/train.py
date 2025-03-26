@@ -4,7 +4,7 @@ from transformers import RobertaTokenizer, RobertaForMultipleChoice
 from torch.optim import AdamW
 from torch.nn import CrossEntropyLoss
 from tqdm import tqdm
-from src.data import load_commonsenseqa
+from scripts.data import load_commonsenseqa
 
 class CommonsenseQADataset(Dataset):
     def __init__(self, dataset, tokenizer, max_length=64):
