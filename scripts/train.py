@@ -62,7 +62,8 @@ training_args = TrainingArguments(
     weight_decay=0.01,
     logging_dir="./logs",
     logging_steps=100,
-    report_to="none",  
+    report_to="none",  # no wandb
+)
 
 # Metrics
 def compute_metrics(eval_pred):
