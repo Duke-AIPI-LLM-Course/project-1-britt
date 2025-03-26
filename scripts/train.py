@@ -29,10 +29,10 @@ class CommonsenseQADataset(Dataset):
             padding='max_length',
             truncation='only_second',
             max_length=self.max_length,
-            return_tensors='pt'
+   
         )
-        input_ids = inputs['input_ids']
-        attention_mask = inputs['attention_mask']
+        input_ids = torch.tensor(inputs['input_ids'])
+        attention_mask = torch.tensor(inputs['attention_mask'])
         label = self.label_map.index(row["answerKey"])
         return input_ids, attention_mask, torch.tensor(label)
 
