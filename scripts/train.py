@@ -3,9 +3,9 @@ from torch.utils.data import Dataset, DataLoader
 from transformers import (
     RobertaTokenizer,
     RobertaForMultipleChoice,
-    AdamW,
     get_scheduler
 )
+from torch.optim import AdamW
 from tqdm import tqdm
 from data import load_commonsenseqa
 
