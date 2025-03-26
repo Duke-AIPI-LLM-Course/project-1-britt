@@ -1,3 +1,6 @@
+import os
+import torch
+import numpy as np
 from datasets import load_dataset
 from transformers import (
     RobertaTokenizer,
@@ -5,10 +8,10 @@ from transformers import (
     Trainer,
     TrainingArguments,
 )
-import numpy as np
-import torch
 from sklearn.metrics import accuracy_score
-import os
+
+# Optional: disable wandb prompts
+os.environ["WANDB_DISABLED"] = "true"
 
 # Load dataset
 dataset = load_dataset("tau/commonsense_qa")
@@ -17,38 +20,39 @@ val_ds = dataset["validation"]
 
 # Load tokenizer
 tokenizer = RobertaTokenizer.from_pretrained("roberta-base")
-
-# Label map
 label_map = {"A": 0, "B": 1, "C": 2, "D": 3, "E": 4}
 
-# Preprocessing
+# Preprocessing function
 def preprocess(example):
     question = example["question"]
     choices = example["choices"]["text"]
-    encodings = tokenizer(
-        [(question, c) for c in choices],
-        truncation=True,
+
+    encoding = tokenizer(
+        [(question, choice) for choice in choices],
         padding="max_length",
+        truncation=True,
         max_length=128,
     )
+
     return {
-        "input_ids": [encodings["input_ids"]],
-        "attention_mask": [encodings["attention_mask"]],
-        "labels": label_map[example["answerKey"]],
+        "input_ids": encoding["input_ids"],              # shape: [5, seq_len]
+        "attention_mask": encoding["attention_mask"],    # shape: [5, seq_len]
+        "labels": label_map[example["answerKey"]],       # int
     }
 
+# Apply preprocessing
 train_ds = train_ds.map(preprocess)
 val_ds = val_ds.map(preprocess)
 
-# Format for PyTorch
-columns = ["input_ids", "attention_mask", "labels"]
-train_ds.set_format(type="torch", columns=columns)
-val_ds.set_format(type="torch", columns=columns)
+# Set format for PyTorch
+train_ds.set_format(type="torch", columns=["input_ids", "attention_mask", "labels"])
+val_ds.set_format(type="torch", columns=["input_ids", "attention_mask", "labels"])
 
 # Load model
 model = RobertaForMultipleChoice.from_pretrained("roberta-base")
+model.config.num_labels = 5  # Just to be safe
 
-# Training config
+# Training arguments
 training_args = TrainingArguments(
     output_dir="./models/roberta-finetuned",
     evaluation_strategy="epoch",
@@ -65,14 +69,13 @@ training_args = TrainingArguments(
     save_total_limit=1,
 )
 
-# Evaluation metric
+# Metric function
 def compute_metrics(eval_pred):
     logits, labels = eval_pred
     preds = np.argmax(logits, axis=1)
-    acc = accuracy_score(labels, preds)
-    return {"accuracy": acc}
+    return {"accuracy": accuracy_score(labels, preds)}
 
-# Trainer
+# Define Trainer
 trainer = Trainer(
     model=model,
     args=training_args,
@@ -82,13 +85,13 @@ trainer = Trainer(
     compute_metrics=compute_metrics,
 )
 
-# Train
+# Train!
 trainer.train()
 
 # Final evaluation
 metrics = trainer.evaluate()
 print(f"📊 Final Validation Accuracy: {metrics['eval_accuracy']:.2%}")
 
-# Save final model
+# Save model
 trainer.save_model("models/roberta-finetuned")
 tokenizer.save_pretrained("models/roberta-finetuned")
