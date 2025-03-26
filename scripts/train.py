@@ -7,7 +7,7 @@ from transformers import (
 )
 from torch.optim import AdamW
 from tqdm import tqdm
-from scripts.data import load_commonsenseqa
+from data import load_commonsenseqa
 
 
 class CommonsenseQADataset(Dataset):
