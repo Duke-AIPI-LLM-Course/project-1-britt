@@ -1,8 +1,11 @@
 import torch
 from torch.utils.data import Dataset, DataLoader
-from transformers import RobertaTokenizer, RobertaForMultipleChoice
-from torch.optim import AdamW
-from torch.nn import CrossEntropyLoss
+from transformers import (
+    RobertaTokenizer,
+    RobertaForMultipleChoice,
+    AdamW,
+    get_scheduler
+)
 from tqdm import tqdm
 from data import load_commonsenseqa
 
@@ -24,7 +27,7 @@ class CommonsenseQADataset(Dataset):
             [question] * 5,
             choices,
             padding='max_length',
-            truncation=True,
+            truncation='only_second',
             max_length=self.max_length,
             return_tensors='pt'
         )
@@ -40,15 +43,24 @@ def train():
     dataloader = DataLoader(dataset, batch_size=4, shuffle=True)
 
     model = RobertaForMultipleChoice.from_pretrained('roberta-base')
-    optimizer = AdamW(model.parameters(), lr=5e-5)
+    optimizer = AdamW(model.parameters(), lr=2e-5)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
     model.train()
 
-    for epoch in range(3):
-        print(f"Epoch {epoch + 1}")
-        for input_ids, attention_mask, labels in tqdm(dataloader):
+    num_epochs = 5
+    num_training_steps = num_epochs * len(dataloader)
+    scheduler = get_scheduler(
+        "linear",
+        optimizer=optimizer,
+        num_warmup_steps=0,
+        num_training_steps=num_training_steps,
+    )
+
+    for epoch in range(num_epochs):
+        print(f"\n🔥 Epoch {epoch + 1}/{num_epochs}")
+        for step, (input_ids, attention_mask, labels) in enumerate(tqdm(dataloader)):
             input_ids = input_ids.to(device)
             attention_mask = attention_mask.to(device)
             labels = labels.to(device)
@@ -61,11 +73,15 @@ def train():
             loss = outputs.loss
             loss.backward()
             optimizer.step()
+            scheduler.step()
             optimizer.zero_grad()
+
+            if step % 100 == 0:
+                print(f"Step {step}: Loss = {loss.item():.4f}")
 
     model.save_pretrained("models/roberta-finetuned")
     tokenizer.save_pretrained("models/roberta-finetuned")
-    print("Model saved to models/roberta-finetuned")
+    print("✅ Model saved to models/roberta-finetuned")
 
 if __name__ == "__main__":
     train()
