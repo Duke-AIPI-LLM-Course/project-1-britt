@@ -1,6 +1,8 @@
 import torch
 from torch.utils.data import Dataset, DataLoader
-from transformers import RobertaTokenizer, RobertaForMultipleChoice, AdamW
+from transformers import RobertaTokenizer, RobertaForMultipleChoice
+from torch.optim import AdamW
+from torch.nn import CrossEntropyLoss
 from tqdm import tqdm
 from src.data import load_commonsenseqa
 
