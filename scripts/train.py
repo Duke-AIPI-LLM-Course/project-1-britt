@@ -18,23 +18,27 @@ class CommonsenseQADataset(Dataset):
 
     def __len__(self):
         return len(self.dataset)
-
+   
     def __getitem__(self, idx):
         row = self.dataset[idx]
         question = row["question"]
         choices = row["choices"]["text"]
-        inputs = self.tokenizer(
-            [question] * 5,
-            choices,
-            padding='max_length',
-            truncation='only_second',
-            max_length=self.max_length,
-   
-        )
-        input_ids = torch.tensor(inputs['input_ids'])
-        attention_mask = torch.tensor(inputs['attention_mask'])
         label = self.label_map.index(row["answerKey"])
+
+        # Build list of (question, choice) pairs
+        encoding = self.tokenizer(
+            [(question, choice) for choice in choices],
+            padding='max_length',
+            truncation=True,
+            max_length=self.max_length,
+            return_tensors="pt"
+        )
+
+        input_ids = encoding["input_ids"]
+        attention_mask = encoding["attention_mask"]
+
         return input_ids, attention_mask, torch.tensor(label)
+
 
 def train():
     train_ds, _ = load_commonsenseqa()
