@@ -1,100 +1,94 @@
-import torch
-from torch.utils.data import Dataset, DataLoader
+from datasets import load_dataset
 from transformers import (
     RobertaTokenizer,
     RobertaForMultipleChoice,
-    get_scheduler
+    Trainer,
+    TrainingArguments,
 )
-from torch.optim import AdamW
-from tqdm import tqdm
-from data import load_commonsenseqa
+import numpy as np
+import torch
+from sklearn.metrics import accuracy_score
+import os
 
+# Load dataset
+dataset = load_dataset("tau/commonsense_qa")
+train_ds = dataset["train"]
+val_ds = dataset["validation"]
 
-class CommonsenseQADataset(Dataset):
-    def __init__(self, dataset, tokenizer, max_length=128):
-        self.dataset = dataset
-        self.tokenizer = tokenizer
-        self.max_length = max_length
-        self.label_map = ["A", "B", "C", "D", "E"]
+# Load tokenizer
+tokenizer = RobertaTokenizer.from_pretrained("roberta-base")
 
-    def __len__(self):
-        return len(self.dataset)
+# Label map
+label_map = {"A": 0, "B": 1, "C": 2, "D": 3, "E": 4}
 
-    def __getitem__(self, idx):
-        row = self.dataset[idx]
-        question = row["question"]
-        choices = row["choices"]["text"]
-        label = self.label_map.index(row["answerKey"])
-
-        encodings = self.tokenizer(
-            [(question, choice) for choice in choices],
-            truncation=True,
-            padding="max_length",
-            max_length=self.max_length,
-            return_tensors="pt"
-        )
-
-        return encodings["input_ids"], encodings["attention_mask"], torch.tensor(label)
-
-
-def train():
-    train_ds, _ = load_commonsenseqa()
-
-    tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
-    dataset = CommonsenseQADataset(train_ds, tokenizer)
-    dataloader = DataLoader(dataset, batch_size=4, shuffle=True)
-
-    model = RobertaForMultipleChoice.from_pretrained('roberta-base')
-    optimizer = AdamW(model.parameters(), lr=2e-5)
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model.to(device)
-    model.train()
-
-    num_epochs = 3  # ✅ Slightly fewer epochs
-    total_steps = len(dataloader) * num_epochs
-
-    scheduler = get_scheduler(
-        "linear",
-        optimizer=optimizer,
-        num_warmup_steps=0,
-        num_training_steps=total_steps
+# Preprocessing
+def preprocess(example):
+    question = example["question"]
+    choices = example["choices"]["text"]
+    encodings = tokenizer(
+        [(question, c) for c in choices],
+        truncation=True,
+        padding="max_length",
+        max_length=128,
     )
+    return {
+        "input_ids": [encodings["input_ids"]],
+        "attention_mask": [encodings["attention_mask"]],
+        "labels": label_map[example["answerKey"]],
+    }
 
-    print(f"🚀 Training on {device} with roberta-base for {num_epochs} epochs")
+train_ds = train_ds.map(preprocess)
+val_ds = val_ds.map(preprocess)
 
-    for epoch in range(num_epochs):
-        print(f"\n📘 Epoch {epoch + 1}/{num_epochs}")
-        running_loss = 0.0
+# Format for PyTorch
+columns = ["input_ids", "attention_mask", "labels"]
+train_ds.set_format(type="torch", columns=columns)
+val_ds.set_format(type="torch", columns=columns)
 
-        for step, (input_ids, attention_mask, labels) in enumerate(tqdm(dataloader)):
-            input_ids = input_ids.to(device)
-            attention_mask = attention_mask.to(device)
-            labels = labels.to(device)
+# Load model
+model = RobertaForMultipleChoice.from_pretrained("roberta-base")
 
-            outputs = model(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                labels=labels
-            )
+# Training config
+training_args = TrainingArguments(
+    output_dir="./models/roberta-finetuned",
+    evaluation_strategy="epoch",
+    save_strategy="epoch",
+    learning_rate=2e-5,
+    per_device_train_batch_size=4,
+    per_device_eval_batch_size=4,
+    num_train_epochs=3,
+    weight_decay=0.01,
+    logging_dir="./logs",
+    logging_steps=100,
+    load_best_model_at_end=True,
+    metric_for_best_model="accuracy",
+    save_total_limit=1,
+)
 
-            loss = outputs.loss
-            loss.backward()
-            optimizer.step()
-            scheduler.step()
-            optimizer.zero_grad()
+# Evaluation metric
+def compute_metrics(eval_pred):
+    logits, labels = eval_pred
+    preds = np.argmax(logits, axis=1)
+    acc = accuracy_score(labels, preds)
+    return {"accuracy": acc}
 
-            running_loss += loss.item()
-            if step % 100 == 0:
-                print(f"Step {step}: Loss = {loss.item():.4f}")
+# Trainer
+trainer = Trainer(
+    model=model,
+    args=training_args,
+    train_dataset=train_ds,
+    eval_dataset=val_ds,
+    tokenizer=tokenizer,
+    compute_metrics=compute_metrics,
+)
 
-        avg_loss = running_loss / len(dataloader)
-        print(f"✅ Epoch {epoch + 1} complete. Avg Loss: {avg_loss:.4f}")
+# Train
+trainer.train()
 
-    model.save_pretrained("models/roberta-finetuned")
-    tokenizer.save_pretrained("models/roberta-finetuned")
-    print("🎉 Model saved to models/roberta-finetuned")
+# Final evaluation
+metrics = trainer.evaluate()
+print(f"📊 Final Validation Accuracy: {metrics['eval_accuracy']:.2%}")
 
-
-if __name__ == "__main__":
-    train()
+# Save final model
+trainer.save_model("models/roberta-finetuned")
+tokenizer.save_pretrained("models/roberta-finetuned")
